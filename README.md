@@ -2,7 +2,7 @@ A parser and viewer for the fgtape format. It can visualize the flight path and 
 
 ### Installation
 Windows users can download the PyInstaller-packaged executable directly from the [latest release](https://github.com/container32/fgtape-viewer/releases/latest).  
-Alternatively, clone the repository from source:
+Or clone the repository:
 ```bash
 git clone https://github.com/container32/fgtape-viewer
 cd fgtape-viewer
