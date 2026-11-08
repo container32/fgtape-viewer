@@ -21,3 +21,6 @@ Run from the repository root:
 ./fgtape_parser.py tape.fgtape -o out.json
 ./fgtape_viewer.py tape.fgtape
 ```
+
+### License
+This project is licensed under the MIT License.
