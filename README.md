@@ -18,7 +18,7 @@ pip install -r requirements.txt
 
 ### Usage
 #### GUI
-After opening an fgtape file, click **Overview** to view the whole flight path. In the list below, check one or two signals and then plot them. Click **Clear Selection** to uncheck them, then check new signals.
+After opening an fgtape file, click **Overview** to view the whole flight path. In the list below, check up to 5 signals and then plot them. Click **Clear Selection** to uncheck them, then check new signals.
 
 ![](images/screenshot.png)
 
