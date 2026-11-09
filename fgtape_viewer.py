@@ -13,7 +13,8 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from fgtape_parser import parse_fgtape
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
+MAX_PLOT_SIGNALS = 5
 
 class FgTapeViewer:
     def __init__(self, root):
@@ -49,13 +50,16 @@ class FgTapeViewer:
         action_frame = ttk.Frame(top_frame)
         action_frame.pack(anchor="w", pady=5)
 
-        self.btn_overview = ttk.Button(action_frame, text="Overview", command=self.plot_overview, state="disabled")
-        self.btn_overview.pack(side="left", padx=(0, 5))
+        self.btn_track = ttk.Button(action_frame, text="View Track", command=self.plot_track, state="disabled")
+        self.btn_track.pack(side="left", padx=(0, 5))
+
+        self.btn_profile = ttk.Button(action_frame, text="View Profile", command=self.plot_profile, state="disabled")
+        self.btn_profile.pack(side="left", padx=(0, 5))
 
         self.btn_export = ttk.Button(action_frame, text="Export Tape to JSON", command=self.export_to_json, state="disabled")
         self.btn_export.pack(side="left")
 
-        mid_frame = ttk.LabelFrame(self.root, text="Select Signals to Plot (Max 2)", padding=10)
+        mid_frame = ttk.LabelFrame(self.root, text=f"Select Signals to Plot (Max {MAX_PLOT_SIGNALS})", padding=10)
         mid_frame.pack(fill="both", expand=True, padx=15, pady=5)
 
         self.canvas = tk.Canvas(mid_frame, highlightthickness=0)
@@ -76,13 +80,13 @@ class FgTapeViewer:
         bottom_frame = ttk.Frame(self.root, padding=(0, 10))
         bottom_frame.pack(fill="x", padx=15)
 
-        self.btn_plot = ttk.Button(bottom_frame, text="Plot Data", width=12, command=self.plot_data, state="disabled")
+        self.btn_plot = ttk.Button(bottom_frame, text="Plot Data", command=self.plot_data, state="disabled")
         self.btn_plot.pack(side="left", padx=5)
 
-        self.btn_clear = ttk.Button(bottom_frame, text="Clear Selection", width=12, command=self.clear_selection, state="disabled")
+        self.btn_clear = ttk.Button(bottom_frame, text="Clear Selection", command=self.clear_selection, state="disabled")
         self.btn_clear.pack(side="left", padx=5)
 
-        self.btn_about = ttk.Button(bottom_frame, text="About", width=12, command=self.show_about)
+        self.btn_about = ttk.Button(bottom_frame, text="About", command=self.show_about)
         self.btn_about.pack(side="right", padx=5)
 
     def load_file_dialog(self):
@@ -142,21 +146,27 @@ class FgTapeViewer:
             cb.pack(fill="x", anchor="w")
 
         if self.signals and self.frames_time:
-            self.btn_overview.config(state="normal")
+            self.btn_track.config(state="normal")
+            self.btn_profile.config(state="normal")
             self.btn_export.config(state="normal")
             self.btn_plot.config(state="normal")
             self.btn_clear.config(state="normal")
         else:
-            self.btn_overview.config(state="disabled")
+            self.btn_track.config(state="disabled")
+            self.btn_profile.config(state="disabled")
             self.btn_export.config(state="disabled")
             self.btn_plot.config(state="disabled")
             self.btn_clear.config(state="disabled")
 
     def handle_checkbox(self, prop_path, var):
         if var.get():
-            if len(self.selected_props) >= 2:
+            if len(self.selected_props) >= MAX_PLOT_SIGNALS:
                 var.set(False)
-                messagebox.showwarning("Limit Reached", "You can select a maximum of 2 data channels at once.")
+                messagebox.showwarning(
+                    "Limit Reached",
+                    f"""A maximum of {MAX_PLOT_SIGNALS} data channels can be selected.
+You can use "Clear Selection" to uncheck them.""",
+                )
             else:
                 self.selected_props.append(prop_path)
         else:
@@ -206,8 +216,8 @@ Source: github.com/container32/fgtape-viewer"""
             print(f"Error occurred while exporting JSON: {e}")
             messagebox.showerror("Export Failed", f"Failed to export JSON:\n{str(e)} ({type(e).__name__})")
 
-    def plot_overview(self):
-        """Draw the whole flight path in 3D (lon/lat/alt), coloured by ground speed."""
+    def plot_track(self):
+        """Draw the whole flight track in 3D (lon/lat/alt), colored by ground speed."""
         d = self.data_series
         pos_keys = (
             "/position[0]/longitude-deg[0]",
@@ -246,7 +256,7 @@ Source: github.com/container32/fgtape-viewer"""
         z = [a * 0.3048 for a in alt_ft]                    # alt,   m (absolute)
 
         fig = plt.figure(figsize=(10, 7))
-        fig.canvas.manager.set_window_title("Flight Path Overview") # type: ignore
+        fig.canvas.manager.set_window_title("Flight Track Overview") # type: ignore
         ax = fig.add_subplot(111, projection="3d")
 
         if speed and any(s > 0 for s in speed):
@@ -289,41 +299,66 @@ Source: github.com/container32/fgtape-viewer"""
 
         ax.view_init(elev=0, azim=-60)
 
-        ax.set_title("Flight Path Overview (Drag to Rotate)")
+        ax.set_title("Flight Track Overview (Drag to Rotate)")
         plt.tight_layout()
         plt.show()
 
-    def plot_data(self):
-        if not self.selected_props:
-            messagebox.showinfo("No Selection", "Please check at least one signal parameter to plot.")
+    def plot_profile(self):
+        keys = [
+            "/position[0]/altitude-ft[0]",
+            "/velocities[0]/airspeed-kt[0]",
+        ]
+        missing = [k for k in keys if k not in self.data_series or not self.data_series[k]]
+        if missing:
+            messagebox.showerror(
+                "Missing Data",
+                "The tape is missing these signals:\n" + "\n".join(missing),
+            )
             return
+        self.plot_data(keys, window_title="Flight Profile Overview")
 
-        if len(self.selected_props) == 1:
-            fig, ax1 = plt.subplots(figsize=(9, 5))
-            prop = self.selected_props[0]
-            ax1.plot(self.frames_time, self.data_series[prop], color="tab:blue", linewidth=1.5)
-            ax1.set_xlabel("Time (seconds)")
-            ax1.set_ylabel(prop, color="tab:blue")
-            ax1.tick_params(axis="y", labelcolor="tab:blue")
-            ax1.grid(True, linestyle="--", alpha=0.6)
-            ax1.set_title(prop)
+    def plot_data(self, props=None, window_title=None):
+        if props is None:
+            if not self.selected_props:
+                messagebox.showinfo("No Selection", "Please check at least one signal parameter to plot.")
+                return
+            props = self.selected_props
+        if window_title is None:
+            window_title = "Signal History"
 
-        elif len(self.selected_props) == 2:
-            fig, ax1 = plt.subplots(figsize=(10, 5))
-            prop1, prop2 = self.selected_props[0], self.selected_props[1]
+        palette = plt.cm.tab10.colors # type: ignore
+        colors = [palette[i % len(palette)] for i in range(len(props))]
+        n = len(props)
 
-            ax1.plot(self.frames_time, self.data_series[prop1], color="tab:blue", label=prop1, linewidth=1.5)
-            ax1.set_xlabel("Time (seconds)")
-            ax1.set_ylabel(prop1, color="tab:blue")
-            ax1.tick_params(axis="y", labelcolor="tab:blue")
-            ax1.grid(True, linestyle="--", alpha=0.6)
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        fig.canvas.manager.set_window_title(window_title) # type: ignore
+        axes = [ax1]
+        for _ in range(n - 1):
+            axes.append(ax1.twinx())
 
-            ax2 = ax1.twinx()
-            ax2.plot(self.frames_time, self.data_series[prop2], color="tab:orange", label=prop2, linewidth=1.5)
-            ax2.set_ylabel(prop2, color="tab:orange")
-            ax2.tick_params(axis="y", labelcolor="tab:orange")
+        lines = []
+        for prop, ax, color in zip(props, axes, colors):
+            ln, = ax.plot(self.frames_time, self.data_series[prop],
+                          color=color, label=prop, linewidth=1.5)
+            lines.append(ln)
+            ax.set_ylabel(prop, color=color)
+            ax.tick_params(axis="y", labelcolor=color)
 
-            ax1.set_title(f"{prop1} and {prop2}")
+        ax1.set_xlabel("Time (seconds)")
+        ax1.grid(True, linestyle="--", alpha=0.6)
+        if n == 1:
+            ax1.set_title(props[0])
+        else:
+            ax1.set_title(", ".join(prop.split("/")[-1] for prop in props))
+        ax1.legend(lines, [l.get_label() for l in lines], loc="upper right")
+
+        if n > 2:
+            for i in range(1, n):
+                axes[i].spines["right"].set_position(("axes", 1.0 + 0.15 * (i - 1)))
+                axes[i].spines["right"].set_visible(True)
+                axes[i].spines["top"].set_visible(False)
+            fig.subplots_adjust(right=1.0 / (1.0 + 0.15 * (n - 2) + 0.08))
+        else:
             fig.tight_layout()
 
         plt.show()
